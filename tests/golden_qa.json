@@ -1,17 +1,1 @@
-[
-  {
-    "question": "What does the guest say about the risks of large language models?",
-    "answer": "The guest discusses concerns about alignment, hallucination, and misuse of large language models, emphasizing the need for robust evaluation frameworks.",
-    "playlist_id": "example_playlist_id"
-  },
-  {
-    "question": "How does the host describe their approach to interviewing technical guests?",
-    "answer": "The host explains they research each guest thoroughly beforehand and aim to make complex topics accessible to a general audience.",
-    "playlist_id": "example_playlist_id"
-  },
-  {
-    "question": "What advice is given about learning machine learning from scratch?",
-    "answer": "The guest recommends starting with foundational mathematics, then progressing to practical projects using open-source frameworks before reading research papers.",
-    "playlist_id": "example_playlist_id"
-  }
-]
+[]

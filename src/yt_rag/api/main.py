@@ -89,6 +89,20 @@ def _run_ingestion_pipeline(playlist_url: str, user_id: str) -> None:
     build_and_persist_bm25(chunks, playlist_id)
     record_ingestion(playlist_id, user_id, playlist_title)
 
+    # Generate structural smoke probes (Tier 2) — always, uses Gemini Flash
+    try:
+        from yt_rag.evaluation.probe_generator import generate_smoke_probes
+        generate_smoke_probes(playlist_id, user_id)
+    except Exception:
+        pass
+
+    # Generate golden retrieval dataset (Tier 1) — requires ANTHROPIC_API_KEY
+    try:
+        from yt_rag.evaluation.golden_generator import generate_golden_dataset
+        generate_golden_dataset(playlist_id, user_id)
+    except Exception:
+        pass
+
 
 @app.post("/ingest", response_model=StatusResponse)
 async def ingest_playlist(

@@ -11,6 +11,8 @@ def _eval_llm() -> ChatGoogleGenerativeAI:
         model=settings.gemini_flash_model,
         google_api_key=settings.google_api_key,
         temperature=0.0,
+        max_output_tokens=4096,
+        thinking_budget=0,
     )
 
 
@@ -39,43 +41,49 @@ def faithfulness_evaluator() -> LangChainStringEvaluator:
     )
 
 
-def relevance_evaluator() -> LangChainStringEvaluator:
-    """LLM-as-a-judge: does the answer directly address the question?
-
-    Target: ≥ 85% of answers score 1.
-    """
-    return LangChainStringEvaluator(
-        "criteria",
-        config={
-            "criteria": {
-                "relevance": (
-                    "Does the answer directly and completely address the question asked? "
-                    "Score 1 if it fully answers the question. Score 0 if it is off-topic, "
-                    "incomplete, or a refusal when a real answer was possible."
-                )
-            },
-            "llm": _eval_llm(),
-        },
-        prepare_data=lambda run, example: {
-            "prediction": (run.outputs or {}).get("answer", ""),
-            "input": (run.inputs or {}).get("question", ""),
-            "reference": (example.outputs or {}).get("answer", ""),
-        },
-    )
-
-
 def citation_precision_evaluator():
     """Heuristic evaluator: fraction of citations matching a reranked source title."""
 
     def evaluate_fn(run, example):
         outputs = run.outputs or {}
-        citations = outputs.get("citations", [])
-        docs = outputs.get("reranked_docs", [])
+        final = outputs.get("final_response") or {}
+        citations = final.get("citations") or []
+        docs = outputs.get("reranked_docs") or []
         if not citations:
-            # No citations — vacuously correct (may also indicate a refusal)
             return {"key": "citation_precision", "score": 1.0}
-        source_titles = {d.metadata.get("title", "") for d in docs}
+        # docs may be Document objects or plain dicts depending on LangSmith serialization
+        source_titles = set()
+        for d in docs:
+            if hasattr(d, "metadata"):
+                source_titles.add(d.metadata.get("title", ""))
+            else:
+                source_titles.add((d.get("metadata") or {}).get("title", ""))
         matches = sum(1 for c in citations if c.get("title") in source_titles)
         return {"key": "citation_precision", "score": matches / len(citations)}
+
+    return evaluate_fn
+
+
+def citation_presence_evaluator():
+    """Heuristic evaluator: does every non-refusal answer include at least one citation?"""
+
+    def evaluate_fn(run, example):
+        final = (run.outputs or {}).get("final_response") or {}
+        if final.get("refusal"):
+            return {"key": "citation_presence", "score": 1.0}
+        has_citations = len(final.get("citations") or []) >= 1
+        return {"key": "citation_presence", "score": int(has_citations)}
+
+    return evaluate_fn
+
+
+def refusal_accuracy_evaluator():
+    """Heuristic evaluator: did the system refuse iff it was expected to?"""
+
+    def evaluate_fn(run, example):
+        expected = (example.outputs or {}).get("expected_refusal", False)
+        final = (run.outputs or {}).get("final_response") or {}
+        actual = bool(final.get("refusal"))
+        return {"key": "refusal_accuracy", "score": int(actual == expected)}
 
     return evaluate_fn

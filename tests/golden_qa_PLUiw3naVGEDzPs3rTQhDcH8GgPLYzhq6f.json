@@ -1,0 +1,119 @@
+[
+  {
+    "question": "What happens when most transactions are conducted in an empire's currency?",
+    "expected_refusal": false,
+    "query_type": "direct_content",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "How did the Dutch defeat the Habsburg empire and become inventive?",
+    "expected_refusal": false,
+    "query_type": "direct_content",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "What is the total amount of credit versus money in the United States?",
+    "expected_refusal": false,
+    "query_type": "direct_content",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "In a beautiful deleveraging, what happens to debts relative to income?",
+    "expected_refusal": false,
+    "query_type": "direct_content",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "Why do the affluent and the impoverished start to dislike each other during an economic downturn?",
+    "expected_refusal": false,
+    "query_type": "semantic_synonym",
+    "vocabulary_note": "'affluent' bridges to 'haves'/'wealthy', 'impoverished' bridges to 'have-nots'/'poor', 'dislike' bridges to 'resent', and 'economic downturn' bridges to 'depression'/'weak economy' in chunk 4.",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "How does the disparity in income between the wealthy and ordinary citizens tend to widen in a thriving nation?",
+    "expected_refusal": false,
+    "query_type": "semantic_synonym",
+    "vocabulary_note": "'disparity in income' bridges to 'wealth gap', 'thriving nation' bridges to 'increased prosperity'/'empire', and 'ordinary citizens' maps to 'have-nots' in chunk 1, none of which appear verbatim.",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "Why does a dominant nation lose its edge as its labor force becomes pricier?",
+    "expected_refusal": false,
+    "query_type": "semantic_synonym",
+    "vocabulary_note": "'dominant nation' bridges to 'leading power', 'lose its edge' bridges to 'less competitive', and 'labor force becomes pricier' bridges to 'more expensive' workers in chunk 5; none of these phrasings appear literally.",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "Why won't issuing new currency necessarily drive up the cost of living?",
+    "expected_refusal": false,
+    "query_type": "semantic_synonym",
+    "vocabulary_note": "'issuing new currency' bridges to 'printing money' and 'cost of living' bridges to 'inflation' in chunk 3; the question avoids the literal source terms.",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "How can buying things on borrowed funds let people spend beyond what they manufacture?",
+    "expected_refusal": false,
+    "query_type": "semantic_synonym",
+    "vocabulary_note": "'borrowed funds' bridges to 'credit'/'borrowing' and 'manufacture' bridges to 'produce' in chunk 6; the substituted words do not appear in the source.",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "According to the video, what triggers a revolution to redistribute wealth?",
+    "expected_refusal": false,
+    "query_type": "meta_framing",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "What does the speaker argue about raising taxes on the wealthy during a downturn?",
+    "expected_refusal": false,
+    "query_type": "meta_framing",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "Based on the content, how did British shipbuilders use Dutch designers to gain an advantage?",
+    "expected_refusal": false,
+    "query_type": "meta_framing",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "What is the best recipe for a classic Neapolitan margherita pizza?",
+    "expected_refusal": true,
+    "query_type": "off_topic",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "How do I treat a sprained ankle at home?",
+    "expected_refusal": true,
+    "query_type": "off_topic",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "What are the rules for scoring a touchdown in American football?",
+    "expected_refusal": true,
+    "query_type": "off_topic",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "Which planets in our solar system have the most moons?",
+    "expected_refusal": true,
+    "query_type": "off_topic",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  }
+]

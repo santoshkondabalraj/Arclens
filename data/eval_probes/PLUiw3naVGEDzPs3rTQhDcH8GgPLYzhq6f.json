@@ -1,0 +1,58 @@
+[
+  {
+    "question": "What happens to the value of collateral borrowers can put up as asset prices drop?",
+    "expected_refusal": false,
+    "query_type": "on_topic_smoke",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "What is the earliest year to which the study of Chinese dynasties and their monies extends?",
+    "expected_refusal": false,
+    "query_type": "on_topic_smoke",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "What date did President Nixon announce that the US was breaking its promise to let people exchange their dollars for gold?",
+    "expected_refusal": false,
+    "query_type": "on_topic_smoke",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "What is the debt-to-income ratio of a country going through a deleveraging in the provided example?",
+    "expected_refusal": false,
+    "query_type": "on_topic_smoke",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "What do rich people use their greater resources to reinforce?",
+    "expected_refusal": false,
+    "query_type": "on_topic_smoke",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "In what year did Julius Caesar die?",
+    "expected_refusal": true,
+    "query_type": "universal_off_topic",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "What is the atomic mass of helium?",
+    "expected_refusal": true,
+    "query_type": "universal_off_topic",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  },
+  {
+    "question": "Who wrote Pride and Prejudice?",
+    "expected_refusal": true,
+    "query_type": "universal_off_topic",
+    "playlist_id": "PLUiw3naVGEDzPs3rTQhDcH8GgPLYzhq6f",
+    "user_id": "santosh244ster"
+  }
+]
