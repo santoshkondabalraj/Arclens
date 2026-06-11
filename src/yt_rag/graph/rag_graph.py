@@ -8,7 +8,6 @@ from yt_rag.graph.nodes import (
     rerank,
     refusal,
     retrieve,
-    rewrite_query,
     threshold_check,
 )
 from yt_rag.graph.state import RAGState
@@ -21,7 +20,6 @@ def _route_after_threshold(state: RAGState) -> str:
 def build_rag_graph():
     graph = StateGraph(RAGState)
 
-    graph.add_node("rewrite_query", rewrite_query)
     graph.add_node("retrieve", retrieve)
     graph.add_node("rerank", rerank)
     graph.add_node("threshold_check", threshold_check)
@@ -29,8 +27,7 @@ def build_rag_graph():
     graph.add_node("format_citations", format_citations)
     graph.add_node("refusal", refusal)
 
-    graph.add_edge(START, "rewrite_query")
-    graph.add_edge("rewrite_query", "retrieve")
+    graph.add_edge(START, "retrieve")
     graph.add_edge("retrieve", "rerank")
     graph.add_edge("rerank", "threshold_check")
 

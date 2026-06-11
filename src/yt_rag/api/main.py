@@ -123,7 +123,6 @@ async def chat(
         "playlist_id": request.playlist_id,
         "user_id": request.user_id,
         "metadata_filter": request.filter,
-        "retrieval_query": "",
         "retrieved_docs": [],
         "reranked_docs": [],
         "min_rerank_score": settings.min_rerank_score,
@@ -169,37 +168,33 @@ async def chat(
 @app.post("/debug/retrieve")
 async def debug_retrieve(request: ChatRequest) -> dict:
     """Return raw retrieval scores — helps calibrate MIN_RERANK_SCORE."""
-    from yt_rag.graph.nodes import REWRITE_PROMPT, _META_PHRASE_RE
-    from yt_rag.generation.chain import build_llm
+    from yt_rag.graph.nodes import _META_PHRASE_RE
     from yt_rag.retrieval.bm25 import load_bm25
     from yt_rag.retrieval.hybrid import build_dense_retriever, build_ensemble_retriever, _get_cross_encoder
     from yt_rag.retrieval.store import get_vectorstore
-
-    # Run the same query rewrite the graph uses so scores are comparable
-    llm = build_llm()
-    rewritten = llm.invoke(
-        REWRITE_PROMPT.format(question=request.question)
-    ).content.strip().strip('"').strip("'")
-    query_for_retrieval = rewritten or request.question
 
     namespace = f"{request.user_id}_{request.playlist_id}"
     vectorstore = get_vectorstore(namespace)
     bm25 = load_bm25(request.playlist_id)
 
     dense = build_dense_retriever(vectorstore, request.filter)
-    retriever = build_ensemble_retriever(dense, bm25) if bm25 else dense
+    query = _META_PHRASE_RE.sub("", request.question).strip() or request.question
 
-    retrieved = retriever.invoke(query_for_retrieval)
+    dense_docs = dense.invoke(query)
+    if bm25 is not None:
+        bm25_docs = bm25.invoke(query)
+        ensemble = build_ensemble_retriever(dense, bm25)
+        retrieved = ensemble.weighted_reciprocal_rank([dense_docs, bm25_docs])
+    else:
+        retrieved = dense_docs
 
     encoder = _get_cross_encoder()
-    normalized_q = _META_PHRASE_RE.sub("", query_for_retrieval).strip()
-    pairs = [(normalized_q, doc.page_content) for doc in retrieved]
+    pairs = [(query, doc.page_content) for doc in retrieved]
     scores = encoder.predict(pairs)
     scored = sorted(zip(scores, retrieved), key=lambda x: x[0], reverse=True)
 
     return {
-        "original_question": request.question,
-        "rewritten_query": rewritten,
+        "question": request.question,
         "retrieved_count": len(retrieved),
         "current_threshold": settings.min_rerank_score,
         "reranked": [

@@ -14,7 +14,8 @@ def build_llm() -> ChatGoogleGenerativeAI:
         model=settings.gemini_flash_model,
         google_api_key=settings.google_api_key,
         temperature=0.0,
-        max_output_tokens=2048,
+        max_output_tokens=8192,
+        thinking_budget=0,
     )
 
 

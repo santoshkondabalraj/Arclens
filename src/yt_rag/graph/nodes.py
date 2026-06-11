@@ -25,34 +25,6 @@ _META_PHRASE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Keyword extraction prompt: strip question framing and meta-phrases; keep the core
-# topic tokens from the question itself. Few-shot examples anchor the output format.
-# No playlist_title — providing it caused the LLM to generate generic domain wordlists
-# instead of extracting terms from the actual question.
-REWRITE_PROMPT = (
-    "Extract the 4-6 most important content keywords from this question for searching "
-    "a video transcript. Remove question words, filler, and meta-phrases "
-    "(\"the speaker\", \"from the video\", \"according to\"). "
-    "Keep only the core topic nouns and verbs.\n"
-    "Output ONLY space-separated keywords, nothing else.\n\n"
-    "Examples:\n"
-    "Q: What causes inflation? → inflation causes\n"
-    "Q: How does credit affect spending? → credit spending affect\n"
-    "Q: Are there any thumb rules to take away? → thumb rules takeaway\n"
-    "Q: What drives productivity growth according to the video? → productivity growth drivers\n\n"
-    "Q: {question} →"
-)
-
-
-@traceable(name="rewrite_query")
-def rewrite_query(state: RAGState) -> dict:
-    from yt_rag.generation.chain import build_llm
-    llm = build_llm()
-    result = llm.invoke(REWRITE_PROMPT.format(question=state["question"]))
-    rewritten = result.content.strip().strip('"').strip("'")
-    return {"retrieval_query": rewritten or state["question"]}
-
-
 @traceable(name="retrieve")
 def retrieve(state: RAGState) -> dict:
     namespace = f"{state['user_id']}_{state['playlist_id']}"
@@ -60,13 +32,18 @@ def retrieve(state: RAGState) -> dict:
     bm25 = load_bm25(state["playlist_id"])
 
     dense = build_dense_retriever(vectorstore, state.get("metadata_filter"))
-    query = state.get("retrieval_query") or state["question"]
+
+    # Strip meta-phrases ("according to the video", "from the video") — they have no
+    # transcript vocabulary and add noise to both embedding similarity and BM25 scoring.
+    query = _META_PHRASE_RE.sub("", state["question"]).strip() or state["question"]
+    dense_docs = dense.invoke(query)
 
     if bm25 is not None:
+        bm25_docs = bm25.invoke(query)
         ensemble = build_ensemble_retriever(dense, bm25)
-        docs = ensemble.invoke(query)
+        docs = ensemble.weighted_reciprocal_rank([dense_docs, bm25_docs])
     else:
-        docs = dense.invoke(query)
+        docs = dense_docs
 
     return {"retrieved_docs": docs}
 
@@ -79,9 +56,10 @@ def rerank(state: RAGState) -> dict:
 
     from yt_rag.retrieval.hybrid import _get_cross_encoder
     encoder = _get_cross_encoder()
-    # Use the rewritten retrieval query (if available) then strip any residual meta-phrases.
-    base_q = state.get("retrieval_query") or state["question"]
-    normalized_q = _META_PHRASE_RE.sub("", base_q).strip()
+    # Use original question (meta-phrases stripped) — ms-marco was trained on NL query-passage
+    # pairs, not keyword bags. The rewrite is BM25-only; the cross-encoder scores better
+    # against full natural-language questions.
+    normalized_q = _META_PHRASE_RE.sub("", state["question"]).strip() or state["question"]
     pairs = [(normalized_q, doc.page_content) for doc in docs]
     scores = encoder.predict(pairs)
 

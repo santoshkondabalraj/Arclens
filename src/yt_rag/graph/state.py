@@ -14,7 +14,6 @@ class RAGState(TypedDict):
     metadata_filter: Optional[dict]
 
     # ── Retrieval ─────────────────────────────────────────────────────────────
-    retrieval_query: Optional[str]   # LLM-rewritten query for retrieval/reranking; falls back to question
     retrieved_docs: list[Document]   # dense+sparse fusion output (up to 40)
     reranked_docs: list[Document]    # cross-encoder output (up to 5)
     min_rerank_score: float          # threshold for refusal check

@@ -20,6 +20,14 @@
 
 ---
 
+### 1.3 Gemini 2.5 Flash thinking tokens consumed `max_output_tokens` budget
+**Symptom:** Generation answers were truncated at ~382 characters, always ending mid-citation (e.g. `[Source: "Title", Channel,` with no timestamp or closing bracket). The truncation point was consistent across runs.  
+**Root cause:** `ChatGoogleGenerativeAI` with `max_output_tokens=2048` and Gemini 2.5 Flash's default thinking mode enabled. The thinking tokens are allocated from the same `max_output_tokens` budget. With ~1600 tokens consumed by internal reasoning, only ~400 tokens remained for the visible response — roughly 380 characters.  
+**Fix:** Set `thinking_budget=0` in `build_llm()` to disable thinking for the generation chain. RAG generation is document-grounded Q&A — it does not benefit from extended reasoning, and thinking mode adds latency and token cost without quality gain. Also raised `max_output_tokens` to `8192` as a safety margin for longer answers.  
+**File:** `src/yt_rag/generation/chain.py`
+
+---
+
 ## 2. API & Model Errors
 
 ### 2.1 Deprecated model — 404 NOT_FOUND
@@ -105,22 +113,31 @@
 ### 6.3 Meta-phrases in queries caused cross-encoder score collapse
 **Symptom:** `"What drives productivity growth?"` → score `+1.019` → answered. `"What drives productivity growth according to the video?"` → score `-2.394` → refused. Semantically identical queries, wildly different scores.  
 **Root cause:** The cross-encoder (`ms-marco-MiniLM-L-6-v2`) was trained on web QA pairs. The phrase `"according to the video"` is a meta-instruction to the RAG system, not a concept that appears in transcript text. The model penalised the token mismatch, collapsing the relevance score even though the underlying information need was identical.  
-**Fix:** Added `_META_PHRASE_RE` in `nodes.py` to strip meta-phrases (`"according to the video"`, `"in this lecture"`, `"based on the content"`, etc.) from the query **before** building cross-encoder pairs. Retrieval still uses the original full question; only reranking uses the normalised form.  
+**Fix:** Added `_META_PHRASE_RE` in `nodes.py` to strip meta-phrases (`"according to the video"`, `"in this lecture"`, `"based on the content"`, etc.) from the query **before** building cross-encoder pairs. The stripped query is also used for dense retrieval — meta-phrases add no embedding signal since they never appear in transcript chunks.  
 **File:** `src/yt_rag/graph/nodes.py`
 
 ---
 
-### 6.4 Rerank threshold `0.3` treated logits as probabilities
-**Symptom:** Topically relevant chunks with scores in the `−2 to 0` range were filtered out, causing unnecessary refusals.  
-**Root cause:** `min_rerank_score = 0.3` was chosen as if cross-encoder scores were calibrated probabilities (where `0.3` = "30% confident"). The ms-marco cross-encoder outputs **raw logits**. Scores of `0–0.3` correspond to weakly-but-genuinely relevant content, not low confidence.  
-**Fix:** Lowered threshold to `-2.0` in `config.py` and `.env`. Score reference for `ms-marco-MiniLM-L-6-v2`:
+### 6.4 Rerank threshold `0.3` treated logits as probabilities — updated progressively
+**Symptom:** Topically relevant chunks were filtered out, causing unnecessary refusals.  
+**Root cause:** `min_rerank_score` was initially set to `0.3` as if cross-encoder scores were calibrated probabilities. The ms-marco cross-encoder outputs **raw logits**. As the threshold was progressively calibrated against real queries, additional failure modes were discovered:
+
+| Threshold | Problem discovered |
+|---|---|
+| `0.3` | Filtered out most valid results (logits, not probabilities) |
+| `-2.0` | Still refused queries where relevant chunk opened with off-topic content (rules chunk scored `-7.35`) |
+| `-8.0` | Still refused semantic synonym queries ("lessons" vs "rules of thumb") scoring around `-9 to -10` |
+| **`-10.0`** | **Current value — allows semantic paraphrase queries while still refusing off-topic queries (score `< -13`)** |
+
+Score reference for `ms-marco-MiniLM-L-6-v2` raw logits:
 
 | Range | Meaning |
 |---|---|
 | `> 3` | Direct answer in chunk |
 | `0 – 3` | Topically related |
-| `−2 – 0` | Same domain, indirect |
-| `< −2` | Off-topic — correctly filtered |
+| `−5 – 0` | Same domain, indirect |
+| `−10 – −5` | Semantic synonym / partial match |
+| `< −13` | Off-topic — correctly filtered |
 
 **Files:** `src/yt_rag/config.py`, `.env`, `.env.example`
 
@@ -131,6 +148,35 @@
 **Root cause:** When the LLM output the JSON refusal format, `format_citations` had no detection logic. It treated the JSON string as a normal answer, so `main.py` returned `ChatResponse(answer='{"refusal":true,...}', refusal=False)`. The UI rendered the JSON verbatim.  
 **Fix:** Added a JSON detection block at the top of `format_citations`. If the answer starts with `{` and parses as `{"refusal": true, ...}`, the node returns a proper `{"refusal": True, "reason": "..."}` final response. The UI then shows the styled amber refusal banner instead of raw JSON.  
 **File:** `src/yt_rag/graph/nodes.py`
+
+---
+
+### 6.6 Keyword query rewriting undermined dense retrieval for synonym queries
+**Symptom:** `"What thumb rules should I learn?"` returned the three Ray Dalio rules. `"What lessons should I learn?"` returned no answer. These are semantically identical questions.  
+**Root cause:** The pipeline included a `rewrite_query` node that extracted keywords from the user's question (e.g. `"lessons learn"`) and passed them to **all** retrieval stages — dense embedding, BM25, and cross-encoder. This caused two compounding failures:
+
+1. **Dense retrieval**: Gemini `text-embedding-004` embeds full natural-language questions better than sparse keyword bags. `"What lessons should I learn?"` has a rich semantic vector that bridges to `"rules of thumb"` in embedding space. `"lessons learn"` does not. Keyword extraction actively undermined the model's semantic capability.
+
+2. **BM25 lexical gap**: Neither `"lessons"` nor `"learn"` appears in the rules chunk (which uses `"rules of thumb"` and `"take away"`). BM25 could not match the vocabulary regardless of query form.
+
+3. **Cross-encoder**: `ms-marco-MiniLM-L-6-v2` was trained on natural-language query–passage pairs. Scoring `"lessons learn"` (a keyword bag) against a passage produces worse results than scoring the original question.
+
+The fix of prompting the rewrite model to expand structural terms (`"lessons" → "lessons rules takeaway key"`) was attempted but rejected because it was domain-specific: it would work for economics but fail for any other playlist (sports, cooking, etc.).
+
+**Fix:** Removed `rewrite_query` entirely. All retrieval stages now use the original question with only `_META_PHRASE_RE` stripping applied:
+- **Dense retrieval**: original question → embedding model bridges synonyms semantically
+- **BM25**: original question → stop-word removal retains content terms naturally
+- **Cross-encoder**: original question → NL query–passage scoring as the model was trained
+
+**Files:** `src/yt_rag/graph/nodes.py`, `src/yt_rag/graph/rag_graph.py`, `src/yt_rag/graph/state.py`, `src/yt_rag/api/main.py`
+
+---
+
+### 6.7 `rerank_top_n=5` silently excluded the most relevant chunk
+**Symptom:** Even after fixing retrieval recall, `"What lessons should I learn?"` was still refused. The rules chunk (chunk_index=21, score `-9.93`) was above the `-10.0` threshold but never reached the LLM.  
+**Root cause:** `rerank` kept only the top 5 chunks by cross-encoder score. For semantic synonym queries, the relevant chunk scored lower than generic same-domain content because of vocabulary mismatch — the rules chunk ranked 10th, outside the cutoff. The `threshold_check` node never saw it.  
+**Fix:** Raised `rerank_top_n` from `5` to `10`. This expands the candidate pool passed to `threshold_check` and the LLM. All 10 chunks for this query type passed the `-10.0` threshold; the LLM correctly identified chunk_index=21 as the source for the explicit rules.  
+**Files:** `src/yt_rag/config.py`, `.env`, `.env.example`
 
 ---
 

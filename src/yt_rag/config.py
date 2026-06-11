@@ -20,8 +20,8 @@ class Settings(BaseSettings):
     # Retrieval thresholds
     dense_top_k: int = 20
     sparse_top_k: int = 20
-    rerank_top_n: int = 5
-    min_rerank_score: float = -8.0
+    rerank_top_n: int = 10
+    min_rerank_score: float = -10.0
 
     # Chunking (tokens)
     body_chunk_size: int = 600
