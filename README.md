@@ -14,11 +14,9 @@ Ask natural-language questions about any YouTube playlist and get grounded, cite
 User question
      │
      ▼
-rewrite_query  ←  Gemini Flash strips meta-framing → content keywords
-     │
-     ▼
-retrieve       ←  Dense (Gemini embeddings) + Sparse (BM25) via Pinecone
-     │               fused with Reciprocal Rank Fusion (RRF)
+retrieve       ←  Dense (Gemini embeddings) + Sparse (BM25) fused via RRF
+     │               Meta-phrases stripped before retrieval; embedding model
+     │               handles semantic synonyms ("lessons" ↔ "rules of thumb")
      ▼
 rerank         ←  Cross-encoder (ms-marco-MiniLM-L-6-v2) scores top candidates
      │
@@ -26,8 +24,8 @@ rerank         ←  Cross-encoder (ms-marco-MiniLM-L-6-v2) scores top candidates
 threshold_check ← Refuse if no chunk clears MIN_RERANK_SCORE
      │
      ▼
-generate       ←  Gemini 2.5 Flash — grounded answer from retrieved chunks only
-     │
+generate       ←  Gemini 2.5 Flash (thinking disabled) — grounded answer
+     │               from retrieved chunks only
      ▼
 format_citations ← Inline [Source: title, channel, ~Xs] → video_id + timestamp
      │
@@ -35,18 +33,24 @@ format_citations ← Inline [Source: title, channel, ~Xs] → video_id + timesta
 Answer + clickable timestamp cards → inline YouTube player
 ```
 
+### Retrieval design
+
+The pipeline uses the same Gemini `text-embedding-004` model for both ingestion and query embedding. This means the model's semantic understanding bridges vocabulary gaps at query time — a question about "lessons to learn" finds a chunk about "rules of thumb" because both map to nearby points in embedding space. No query rewriting or keyword expansion is needed or used.
+
+BM25 complements dense retrieval for exact-term queries (specific names, numbers, rare vocabulary). The two result sets are fused with Reciprocal Rank Fusion (RRF) before cross-encoder reranking.
+
 ---
 
 ## Features
 
 - **Hybrid retrieval** — dense semantic search (Gemini embeddings) + BM25 lexical search, fused via RRF
-- **Cross-encoder reranking** — ms-marco-MiniLM-L-6-v2 scores each candidate for precise relevance
-- **Query rewriting** — keyword extraction strips meta-framing ("according to the video") before retrieval
-- **Grounded generation** — Gemini 2.5 Flash answers only from retrieved transcript chunks
+- **Semantic synonym handling** — embedding model bridges paraphrases and vocabulary gaps across any domain
+- **Cross-encoder reranking** — ms-marco-MiniLM-L-6-v2 scores each candidate for precise relevance ordering
+- **Grounded generation** — Gemini 2.5 Flash answers only from retrieved transcript chunks; thinking mode disabled for deterministic output
 - **Timestamp citations** — every claim links back to the exact second in the source video
 - **Inline video player** — click any citation to watch from the cited moment without leaving the app
 - **Staleness detection** — warns when a playlist hasn't been re-ingested in > 30 days
-- **Debug endpoint** — `/debug/retrieve` shows rewritten query, scores, and threshold in real time
+- **Debug endpoint** — `/debug/retrieve` shows per-chunk scores and active threshold in real time
 
 ---
 
@@ -56,7 +60,7 @@ Answer + clickable timestamp cards → inline YouTube player
 |---|---|
 | API | FastAPI + Uvicorn |
 | Orchestration | LangGraph (StateGraph) |
-| LLM | Gemini 2.5 Flash (generation + query rewriting) |
+| LLM | Gemini 2.5 Flash (generation, thinking disabled) |
 | Embeddings | Gemini `text-embedding-004` |
 | Vector store | Pinecone (dense namespace per user×playlist) |
 | Sparse index | BM25 (rank-bm25, persisted per playlist) |
@@ -103,8 +107,8 @@ Key settings in `.env`:
 GOOGLE_API_KEY=...
 PINECONE_API_KEY=...
 PINECONE_INDEX_NAME=yt-rag-hybrid
-MIN_RERANK_SCORE=-8.0     # cross-encoder logit threshold
-RERANK_TOP_N=5
+MIN_RERANK_SCORE=-10.0    # cross-encoder logit threshold
+RERANK_TOP_N=10
 DENSE_TOP_K=20
 SPARSE_TOP_K=20
 ```
@@ -137,9 +141,11 @@ curl -X POST http://localhost:8000/ingest \
 
 Select a playlist from the Library, type a question, and press **Ask**. Results appear as source clip cards with timestamps; click any card to watch the clip inline.
 
+Questions can be phrased naturally — you do not need to match the exact vocabulary used in the video. Semantic paraphrases ("lessons", "advice", "key points", "insights") resolve to the same content as direct queries ("rules of thumb", "takeaways").
+
 ### 3. Calibrate retrieval
 
-Use the debug endpoint to see how a question is rewritten and how each chunk scores:
+Use the debug endpoint to see how each chunk scores for a given question:
 
 ```bash
 curl -X POST http://localhost:8000/debug/retrieve \
@@ -147,7 +153,7 @@ curl -X POST http://localhost:8000/debug/retrieve \
   -d '{"question": "What drives productivity growth?", "playlist_id": "...", "user_id": "..."}'
 ```
 
-Response includes `original_question`, `rewritten_query`, per-chunk scores, and the active threshold.
+Response includes `question`, `retrieved_count`, `current_threshold`, and per-chunk scores with previews.
 
 ---
 
@@ -160,7 +166,7 @@ src/yt_rag/
 ├── embeddings/   # Gemini embedding wrapper
 ├── generation/   # Prompt templates + LangChain generation chain
 ├── graph/        # LangGraph StateGraph (nodes, state, graph wiring)
-│   ├── nodes.py  # rewrite_query, retrieve, rerank, generate, format_citations
+│   ├── nodes.py  # retrieve, rerank, generate, format_citations
 │   ├── state.py  # RAGState TypedDict
 │   └── rag_graph.py
 ├── ingestion/    # YouTube loader, transcript cleaner, freshness tracking
@@ -179,18 +185,18 @@ scripts/          # CLI ingestion + evaluation helpers
 
 | Variable | Default | Description |
 |---|---|---|
-| `GEMINI_FLASH_MODEL` | `gemini-2.5-flash` | Generation + rewrite model |
-| `GEMINI_EMBEDDING_MODEL` | `models/text-embedding-004` | Dense embedding model |
+| `GEMINI_FLASH_MODEL` | `gemini-2.5-flash` | Generation model |
+| `GEMINI_EMBEDDING_MODEL` | `models/text-embedding-004` | Dense embedding model (used for both ingestion and query) |
 | `PINECONE_INDEX_NAME` | `yt-rag-hybrid` | Pinecone index name |
 | `DENSE_TOP_K` | `20` | Candidates from dense retrieval |
 | `SPARSE_TOP_K` | `20` | Candidates from BM25 retrieval |
-| `RERANK_TOP_N` | `5` | Top chunks passed to generation |
-| `MIN_RERANK_SCORE` | `-8.0` | Cross-encoder logit cutoff (raw logits, not 0–1) |
+| `RERANK_TOP_N` | `10` | Top chunks passed to threshold check and generation |
+| `MIN_RERANK_SCORE` | `-10.0` | Cross-encoder logit cutoff (raw logits, not 0–1) |
 | `STALENESS_DAYS` | `30` | Days before a stale-corpus warning is shown |
 | `BODY_CHUNK_SIZE` | `600` | Tokens per transcript chunk |
 | `BODY_CHUNK_OVERLAP` | `150` | Token overlap between chunks |
 
-> **Note on `MIN_RERANK_SCORE`:** the ms-marco cross-encoder outputs raw logits, not probabilities. Scores above `-2` are topically relevant; scores above `0` are directly relevant. `-8.0` is intentionally lenient so the LLM handles final relevance filtering.
+> **Note on `MIN_RERANK_SCORE`:** the ms-marco cross-encoder outputs raw logits, not probabilities. Scores above `0` are directly relevant; `-5 to 0` is same-domain and topically related; `-10 to -5` covers semantic synonym matches (e.g. "lessons" finding a "rules of thumb" chunk). `-10.0` is the current cutoff. Off-topic queries (e.g. geography against an economics corpus) score below `-13` and are correctly refused.
 
 ---
 
