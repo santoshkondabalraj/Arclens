@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Google / Gemini
     google_api_key: str = ""
-    gemini_embedding_model: str = "models/text-embedding-004"
+    gemini_embedding_model: str = "models/gemini-embedding-2"
     gemini_flash_model: str = "gemini-2.5-flash"
 
     # Pinecone
