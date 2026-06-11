@@ -32,12 +32,13 @@
     .scrollbar-thin::-webkit-scrollbar { width: 4px; }
     .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
     .scrollbar-thin::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
-    .answer-text { white-space: pre-wrap; line-height: 1.8; }
     @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:.45} }
     .skeleton { animation: shimmer 1.4s ease-in-out infinite; background:#f1f5f9; border-radius:6px; }
+    .answer-prose p { margin-bottom: 0.75rem; line-height: 1.75; }
+    .answer-prose p:last-child { margin-bottom: 0; }
   </style>
 </head>
-<body class="h-full bg-gray-50 font-sans antialiased" x-data="ragApp()" x-cloak @keydown.escape.window="activeVideo = null">
+<body class="h-full bg-gray-50 font-sans antialiased" x-data="ragApp()" x-cloak @keydown.escape.window="activeVideo = null; spaceMenuOpen = null; threadMenuOpen = null">
 
 <!-- ══ Video modal ══════════════════════════════════════════════════════ -->
 <div
@@ -52,7 +53,6 @@
   class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
 >
   <div class="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-4xl flex flex-col">
-    <!-- Modal header -->
     <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
       <div class="min-w-0">
         <p class="text-sm font-semibold text-gray-800 truncate" x-text="activeVideo?.title"></p>
@@ -69,8 +69,6 @@
         </button>
       </div>
     </div>
-
-    <!-- YouTube iframe — recreated each open via x-if so autoplay resets correctly -->
     <div class="relative w-full bg-black" style="padding-bottom:56.25%">
       <template x-if="activeVideo">
         <iframe
@@ -82,8 +80,6 @@
         ></iframe>
       </template>
     </div>
-
-    <!-- Modal footer -->
     <div class="px-5 py-3 flex items-center justify-between border-t border-gray-100 flex-shrink-0">
       <p class="text-xs text-gray-400">Press <kbd class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">Esc</kbd> to close</p>
       <a :href="ytLink(activeVideo?.video_id, activeVideo?.timestamp_seconds)"
@@ -99,7 +95,7 @@
 <div class="flex h-screen overflow-hidden">
 
   <!-- ══════════════ SIDEBAR ══════════════ -->
-  <aside class="w-60 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+  <aside class="w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
 
     <!-- Logo -->
     <div class="px-5 py-4 border-b border-gray-100 flex items-center">
@@ -120,13 +116,144 @@
       </button>
     </nav>
 
-    <!-- Library -->
+    <!-- Scrollable area: Threads + Library -->
     <div class="flex-1 overflow-y-auto scrollbar-thin">
-      <div class="px-5 pt-4 pb-2">
+
+      <!-- ── Threads ── -->
+      <div class="px-5 pt-4 pb-1">
+        <p class="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Threads</p>
+      </div>
+
+      <div class="px-3 pb-2">
+        <template x-for="space in spaces" :key="space.id">
+          <div class="mb-0.5">
+
+            <!-- Space header row -->
+            <div class="flex items-center gap-0.5 group">
+              <button
+                @click="expandedSpaces[space.id] = !expandedSpaces[space.id]; activeSpaceId = space.id"
+                class="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition text-left min-w-0"
+                :class="activeSpaceId === space.id ? 'text-brand-700' : 'text-gray-600'"
+              >
+                <svg class="w-2.5 h-2.5 flex-shrink-0 transition-transform duration-150"
+                     :class="expandedSpaces[space.id] ? 'rotate-90' : ''"
+                     fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M6 6l8 4-8 4V6z"/>
+                </svg>
+                <span class="text-xs font-medium truncate" x-text="space.name"></span>
+                <span x-show="activeSpaceId === space.id"
+                      class="ml-auto w-1.5 h-1.5 rounded-full bg-brand-500 flex-shrink-0"></span>
+              </button>
+
+              <!-- ⋯ actions -->
+              <div class="relative flex-shrink-0 opacity-0 group-hover:opacity-100 transition">
+                <button @click.stop="spaceMenuOpen = spaceMenuOpen === space.id ? null : space.id"
+                        class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                  </svg>
+                </button>
+                <div x-show="spaceMenuOpen === space.id"
+                     @click.outside="spaceMenuOpen = null"
+                     class="absolute right-0 top-7 z-20 w-28 bg-white rounded-lg shadow-lg border border-gray-100 py-1">
+                  <button @click="startRenameSpace(space.id)"
+                          class="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Rename</button>
+                  <button x-show="space.id !== defaultSpaceId()"
+                          @click="deleteSpace(space.id); spaceMenuOpen = null"
+                          class="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50">Delete</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Inline rename input -->
+            <div x-show="renamingSpaceId === space.id" class="px-1 pt-0.5 pb-1">
+              <div class="flex gap-1">
+                <input x-model="renamingSpaceName"
+                       @keydown.enter="confirmRenameSpace(space.id)"
+                       @keydown.escape="renamingSpaceId = null"
+                       class="flex-1 text-xs rounded-md px-2 py-1 border border-brand-300 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-white"/>
+                <button @click="confirmRenameSpace(space.id)"
+                        class="px-2 py-1 text-xs rounded-md bg-brand-600 text-white hover:bg-brand-700 font-medium">✓</button>
+              </div>
+            </div>
+
+            <!-- Thread items -->
+            <div x-show="expandedSpaces[space.id]">
+              <template x-for="t in threadsForSpace(space.id)" :key="t.id">
+                <div class="relative group" :class="threadMenuOpen === t.id ? 'z-20' : ''">
+                  <div
+                    @click="restoreThread(t)"
+                    class="flex items-center gap-2 pl-6 pr-7 py-1.5 rounded-lg text-xs text-gray-500 hover:bg-gray-50 transition cursor-pointer"
+                    :class="activeThreadId === t.id ? 'bg-brand-50 text-brand-700 border-l-2 border-brand-400 !pl-[22px]' : ''"
+                  >
+                    <svg class="w-3 h-3 flex-shrink-0 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+                    </svg>
+                    <span class="truncate" x-text="t.question"></span>
+                  </div>
+                  <!-- ⋯ button: invisible/visible avoids opacity stacking context -->
+                  <button @click.stop="threadMenuOpen = threadMenuOpen === t.id ? null : t.id"
+                          class="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 invisible group-hover:visible">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
+                    </svg>
+                  </button>
+                  <!-- Dropdown: sibling to content, not inside opacity wrapper -->
+                  <div x-show="threadMenuOpen === t.id"
+                       @click.outside="threadMenuOpen = null"
+                       class="absolute right-1 top-full mt-0.5 z-30 w-36 bg-white rounded-lg shadow-lg border border-gray-100 py-1">
+                    <template x-if="otherSpaces(space.id).length > 0">
+                      <div>
+                        <p class="px-3 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Move to</p>
+                        <template x-for="s in otherSpaces(space.id)" :key="s.id">
+                          <button @click="moveThread(t.id, s.id); threadMenuOpen = null"
+                                  class="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 truncate"
+                                  x-text="s.name"></button>
+                        </template>
+                        <div class="border-t border-gray-100 my-1"></div>
+                      </div>
+                    </template>
+                    <button @click="deleteThread(t.id); threadMenuOpen = null"
+                            class="w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50">Delete</button>
+                  </div>
+                </div>
+              </template>
+              <p x-show="threadsForSpace(space.id).length === 0"
+                 class="pl-6 py-1 text-[11px] text-gray-300 italic">No threads yet</p>
+            </div>
+
+          </div>
+        </template>
+
+        <!-- + New space -->
+        <div x-show="!showNewSpaceForm">
+          <button @click="showNewSpaceForm = true"
+                  class="flex items-center gap-1.5 px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition w-full rounded-lg hover:bg-gray-50">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            New space
+          </button>
+        </div>
+        <div x-show="showNewSpaceForm" class="flex gap-1.5 px-1 pt-0.5 pb-1">
+          <input x-model="newSpaceName"
+                 @keydown.enter="createSpace(newSpaceName)"
+                 @keydown.escape="showNewSpaceForm = false; newSpaceName = ''"
+                 placeholder="Space name…"
+                 class="flex-1 text-xs rounded-lg px-2.5 py-1.5 border border-gray-200 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:bg-white"/>
+          <button @click="createSpace(newSpaceName)"
+                  class="px-3 py-1 text-xs rounded-lg bg-brand-600 text-white hover:bg-brand-700 font-medium">Add</button>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="mx-4 border-t border-gray-100 my-1"></div>
+
+      <!-- ── Library ── -->
+      <div class="px-5 pt-3 pb-2">
         <p class="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Library</p>
       </div>
 
-      <!-- Ingested playlists list -->
       <div class="px-3 space-y-0.5 pb-3">
         <template x-if="playlists.length === 0">
           <p class="px-3 py-2 text-xs text-gray-400 italic">No playlists ingested yet.</p>
@@ -151,7 +278,8 @@
           </button>
         </template>
       </div>
-    </div>
+
+    </div><!-- end scrollable -->
 
     <!-- Ingest accordion -->
     <div class="border-t border-gray-100">
@@ -219,7 +347,6 @@
           class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition"
         />
       </div>
-      <!-- Playlist badge (shows active playlist + user) -->
       <div x-show="playlistId" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-50 border border-brand-100 text-xs text-brand-700 font-medium flex-shrink-0 max-w-[200px]">
         <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.867v6.266a1 1 0 01-1.447.902L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
@@ -244,8 +371,8 @@
     <!-- Body -->
     <div class="flex-1 flex overflow-hidden">
 
-      <!-- Center: clip cards -->
-      <main class="flex-1 overflow-y-auto scrollbar-thin px-6 py-6 space-y-5">
+      <!-- ── Center: clip cards ── -->
+      <main class="flex-1 overflow-y-auto scrollbar-thin px-6 py-6 flex flex-col gap-5">
 
         <!-- Question heading -->
         <div x-show="currentQuestion">
@@ -256,16 +383,11 @@
         <!-- Error banner -->
         <div x-show="chatStatus === 'error'" class="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm" x-text="errorMsg"></div>
 
-        <!-- Refusal banner -->
-        <div x-show="refusalReason" class="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-          <span class="font-semibold">No grounded answer found — </span><span x-text="refusalReason"></span>
-        </div>
-
         <!-- Skeleton -->
         <div x-show="chatStatus === 'loading'" class="space-y-4">
           <template x-for="i in 3" :key="i">
             <div class="flex gap-4 p-4 rounded-2xl border border-gray-100 bg-white shadow-sm">
-              <div class="skeleton w-44 h-26 flex-shrink-0 rounded-xl" style="height:6.5rem"></div>
+              <div class="skeleton w-44 flex-shrink-0 rounded-xl" style="height:6.5rem"></div>
               <div class="flex-1 space-y-2.5 py-1">
                 <div class="skeleton h-3 w-16 rounded-full"></div>
                 <div class="skeleton h-4 w-3/4"></div>
@@ -277,8 +399,36 @@
           </template>
         </div>
 
-        <!-- Clip cards (one per citation) -->
-        <div x-show="chatStatus === 'done' && citations.length > 0" class="space-y-3">
+        <!-- Hard refusal: centred empty state -->
+        <div x-show="answerState === 'refused'"
+             class="flex-1 flex flex-col items-center justify-center min-h-72 gap-4">
+          <div class="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
+            <svg class="w-7 h-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
+          <div class="text-center">
+            <p class="text-sm font-semibold text-gray-500">No sources found</p>
+            <p class="text-xs text-gray-400 mt-1.5 max-w-xs leading-relaxed"
+               x-text="refusalReason || 'This question is outside the content of the selected playlist.'"></p>
+          </div>
+        </div>
+
+        <!-- Limited sources banner -->
+        <div x-show="answerState === 'limited'"
+             class="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
+          <svg class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+          </svg>
+          <div>
+            <p class="text-sm font-medium text-amber-800">Limited sources</p>
+            <p class="text-xs text-amber-700 mt-0.5">Only one clip matched this question. The answer may be incomplete.</p>
+          </div>
+        </div>
+
+        <!-- Clip cards -->
+        <div x-show="(answerState === 'full' || answerState === 'limited') && citations.length > 0"
+             class="space-y-3">
           <p class="text-xs font-semibold uppercase tracking-widest text-gray-400">Sources</p>
           <template x-for="(c, idx) in citations" :key="idx">
             <div
@@ -286,7 +436,6 @@
               :class="c.video_id ? 'cursor-pointer' : 'cursor-default'"
               class="flex gap-4 p-4 rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-md hover:border-brand-100 transition-all group"
             >
-              <!-- Thumbnail -->
               <div class="relative flex-shrink-0 w-44 rounded-xl overflow-hidden bg-gray-100" style="height:6.5rem">
                 <img
                   x-show="c.video_id"
@@ -303,8 +452,6 @@
                   </div>
                 </div>
               </div>
-
-              <!-- Info -->
               <div class="flex-1 min-w-0 py-0.5">
                 <div class="flex items-start justify-between gap-2 mb-1.5">
                   <span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
@@ -324,21 +471,22 @@
         </div>
 
         <!-- Empty / idle -->
-        <div x-show="chatStatus === 'idle'" class="flex flex-col items-center justify-center h-72 text-gray-300 gap-3">
+        <div x-show="answerState === 'idle' && chatStatus !== 'loading'"
+             class="flex flex-col items-center justify-center h-72 text-gray-300 gap-3">
           <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.069A1 1 0 0121 8.867v6.266a1 1 0 01-1.447.902L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
           </svg>
           <p class="text-sm">Select a playlist from the sidebar and ask a question</p>
         </div>
 
-        <!-- No playlist selected warning -->
-        <div x-show="chatStatus === 'idle' && !playlistId" class="mt-2 text-center">
+        <!-- No playlist selected -->
+        <div x-show="answerState === 'idle' && !playlistId && chatStatus !== 'loading'" class="mt-2 text-center">
           <p class="text-xs text-amber-500">← Select an ingested playlist from the Library, or add a new one</p>
         </div>
 
       </main>
 
-      <!-- Right: answer panel -->
+      <!-- ── Right: answer panel ── -->
       <aside class="w-96 flex-shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden">
 
         <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
@@ -360,12 +508,28 @@
             <div class="skeleton h-3 w-3/4"></div>
           </div>
 
-          <!-- Answer -->
-          <div x-show="chatStatus === 'done' && answer && !refusalReason">
-            <!-- Teal left-border accent block -->
-            <div class="border-l-4 border-brand-500 pl-4 mb-5">
-              <p class="answer-text text-sm text-gray-700 leading-relaxed" x-text="answer"></p>
+          <!-- Hard refusal -->
+          <div x-show="answerState === 'refused'">
+            <div class="rounded-xl bg-gray-50 border border-gray-100 px-4 py-4">
+              <div class="flex items-center gap-2 text-gray-400 mb-2">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                </svg>
+                <span class="text-sm font-medium text-gray-500">Outside playlist content</span>
+              </div>
+              <p class="text-xs text-gray-400 leading-relaxed"
+                 x-text="refusalReason || 'No grounded answer could be found in the indexed content.'"></p>
             </div>
+          </div>
+
+          <!-- Full or limited answer -->
+          <div x-show="answerState === 'full' || answerState === 'limited'">
+            <div class="border-l-4 pl-4 mb-5"
+                 :class="answerState === 'limited' ? 'border-amber-400' : 'border-brand-500'">
+              <div class="answer-prose text-sm text-gray-700" x-html="formatAnswer(answer)"></div>
+            </div>
+
+            <hr class="my-4 border-gray-100">
 
             <!-- Sources table -->
             <div x-show="citations.length > 0">
@@ -373,13 +537,13 @@
               <div class="space-y-2">
                 <template x-for="(c, idx) in citations" :key="idx">
                   <div class="flex items-start gap-2.5 py-2 border-b border-gray-50 last:border-0">
-                    <span class="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center mt-0.5" x-text="idx + 1"></span>
+                    <span class="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center mt-0.5"
+                          x-text="idx + 1"></span>
                     <div class="flex-1 min-w-0">
                       <p class="text-xs font-medium text-gray-800 leading-snug" x-text="c.title"></p>
                       <div class="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span class="text-[11px] text-gray-400" x-text="c.channel"></span>
                         <span class="text-gray-200">·</span>
-                        <!-- timestamp: clickable when video_id present, plain text otherwise -->
                         <button
                           x-show="c.video_id"
                           @click="openVideo(c)"
@@ -402,7 +566,8 @@
           </div>
 
           <!-- Idle placeholder -->
-          <div x-show="chatStatus === 'idle'" class="flex flex-col items-center justify-center h-52 text-gray-300 gap-2">
+          <div x-show="answerState === 'idle' && chatStatus !== 'loading'"
+               class="flex flex-col items-center justify-center h-52 text-gray-300 gap-2">
             <svg class="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
             </svg>
@@ -419,20 +584,21 @@
 <script>
 function ragApp() {
   return {
-    // Video modal
+    // ── Video modal ──
     activeVideo: null,
 
-    // Sidebar state
+    // ── Sidebar ──
     ingestOpen: false,
-    playlists: [],   // [{playlist_id, user_id, last_ingested, status}]
+    playlists: [],
+    view: 'home',
 
-    // Ingest form
+    // ── Ingest form ──
     playlistUrl: '',
     userId: '',
     ingestStatus: 'idle',
     ingestError: '',
 
-    // Chat
+    // ── Chat ──
     playlistId: '',
     question: '',
     currentQuestion: '',
@@ -440,24 +606,39 @@ function ragApp() {
     citations: [],
     refusalReason: '',
     chatStatus: 'idle',
+    answerState: 'idle',   // 'idle' | 'full' | 'limited' | 'refused'
     errorMsg: '',
 
-    view: 'home',
+    // ── Spaces ──
+    spaces: [],
+    activeSpaceId: null,
+    expandedSpaces: {},
+    showNewSpaceForm: false,
+    newSpaceName: '',
+    spaceMenuOpen: null,
+    renamingSpaceId: null,
+    renamingSpaceName: '',
+
+    // ── Threads ──
+    threads: [],
+    activeThreadId: null,
+    threadMenuOpen: null,
+
+    // ── Lifecycle ────────────────────────────────────────────────────────
 
     async init() {
-      // Auto-extract playlist ID (and matching userId) when URL changes
       this.$watch('playlistUrl', (url) => {
         try {
           const u = new URL(url);
           const list = u.searchParams.get('list');
           if (list) {
             this.playlistId = list;
-            // Look up the stored user_id for this playlist so the namespace matches
             const stored = this.playlists.find(p => p.playlist_id === list);
             if (stored?.user_id) this.userId = stored.user_id;
           }
         } catch (_) {}
       });
+      this.loadFromStorage();
       await this.loadPlaylists();
     },
 
@@ -473,10 +654,162 @@ function ragApp() {
       if (pl.user_id) this.userId = pl.user_id;
     },
 
+    // ── Storage ──────────────────────────────────────────────────────────
+
+    loadFromStorage() {
+      try {
+        const s = localStorage.getItem('arclens_spaces');
+        const t = localStorage.getItem('arclens_threads');
+        this.spaces  = s ? JSON.parse(s) : [];
+        this.threads = t ? JSON.parse(t) : [];
+      } catch (_) {
+        this.spaces  = [];
+        this.threads = [];
+      }
+      if (this.spaces.length === 0) {
+        this.spaces = [{ id: 'sp_default', name: 'Default', created_at: Date.now() }];
+      }
+      this.activeSpaceId = this.spaces[0].id;
+      this.expandedSpaces = {};
+      this.spaces.forEach(sp => { this.expandedSpaces[sp.id] = true; });
+      this.persistStorage();
+    },
+
+    persistStorage() {
+      try {
+        localStorage.setItem('arclens_spaces',  JSON.stringify(this.spaces));
+        localStorage.setItem('arclens_threads', JSON.stringify(this.threads));
+      } catch (_) {}
+    },
+
+    // ── Spaces ───────────────────────────────────────────────────────────
+
+    defaultSpaceId() {
+      const def = this.spaces.find(s => s.name === 'Default') || this.spaces[0];
+      return def ? def.id : null;
+    },
+
+    createSpace(name) {
+      if (!name.trim()) return;
+      const id = 'sp_' + Date.now() + Math.random().toString(36).slice(2, 5);
+      this.spaces.push({ id, name: name.trim(), created_at: Date.now() });
+      this.expandedSpaces[id] = true;
+      this.activeSpaceId = id;
+      this.newSpaceName = '';
+      this.showNewSpaceForm = false;
+      this.persistStorage();
+    },
+
+    deleteSpace(id) {
+      if (id === this.defaultSpaceId()) return;
+      const defId = this.defaultSpaceId();
+      this.threads = this.threads.map(t => t.space_id === id ? { ...t, space_id: defId } : t);
+      this.spaces = this.spaces.filter(s => s.id !== id);
+      if (this.activeSpaceId === id) this.activeSpaceId = defId;
+      this.persistStorage();
+    },
+
+    startRenameSpace(id) {
+      const sp = this.spaces.find(s => s.id === id);
+      if (!sp) return;
+      this.renamingSpaceId = id;
+      this.renamingSpaceName = sp.name;
+      this.spaceMenuOpen = null;
+    },
+
+    confirmRenameSpace(id) {
+      if (!this.renamingSpaceName.trim()) { this.renamingSpaceId = null; return; }
+      const sp = this.spaces.find(s => s.id === id);
+      if (sp) sp.name = this.renamingSpaceName.trim();
+      this.renamingSpaceId = null;
+      this.renamingSpaceName = '';
+      this.persistStorage();
+    },
+
+    threadsForSpace(spaceId) {
+      return this.threads.filter(t => t.space_id === spaceId).slice(0, 5);
+    },
+
+    otherSpaces(currentSpaceId) {
+      return this.spaces.filter(s => s.id !== currentSpaceId);
+    },
+
+    deleteThread(id) {
+      this.threads = this.threads.filter(t => t.id !== id);
+      if (this.activeThreadId === id) this.activeThreadId = null;
+      this.persistStorage();
+    },
+
+    moveThread(threadId, targetSpaceId) {
+      const t = this.threads.find(t => t.id === threadId);
+      if (t) t.space_id = targetSpaceId;
+      this.persistStorage();
+    },
+
+    // ── Threads ──────────────────────────────────────────────────────────
+
+    saveThread(qa) {
+      const id = 'th_' + Date.now() + Math.random().toString(36).slice(2, 5);
+      this.threads.unshift({
+        id,
+        space_id: this.activeSpaceId || this.defaultSpaceId(),
+        question:      qa.question,
+        answer:        qa.answer,
+        citations:     qa.citations,
+        refusal:       qa.refusal,
+        refusalReason: qa.refusalReason,
+        playlist_id:   qa.playlist_id,
+        user_id:       qa.user_id,
+        created_at:    Date.now(),
+      });
+      if (this.threads.length > 100) this.threads = this.threads.slice(0, 100);
+      this.activeThreadId = id;
+      this.persistStorage();
+    },
+
+    restoreThread(t) {
+      this.currentQuestion = t.question;
+      this.answer          = t.answer || '';
+      this.citations       = t.citations || [];
+      this.refusalReason   = t.refusalReason || '';
+      this.playlistId      = t.playlist_id || this.playlistId;
+      if (t.user_id) this.userId = t.user_id;
+      if (t.refusal || this.citations.length === 0) {
+        this.answerState = 'refused';
+        if (!this.refusalReason && this.answer) {
+          this.refusalReason = this.answer;
+          this.answer = '';
+        }
+      } else {
+        this.answerState = this.citations.length >= 2 ? 'full' : 'limited';
+      }
+      this.chatStatus   = 'done';
+      this.activeThreadId = t.id;
+      this.question = '';
+    },
+
+    // ── Answer ───────────────────────────────────────────────────────────
+
+    formatAnswer(text) {
+      if (!text) return '';
+      const escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      const withBold = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      return withBold
+        .split(/\n+/)
+        .filter(p => p.trim())
+        .map(p => `<p>${p}</p>`)
+        .join('');
+    },
+
+    // ── Ingest ───────────────────────────────────────────────────────────
+
     async ingest() {
       if (!this.playlistUrl.trim()) return;
       this.ingestStatus = 'loading';
-      this.ingestError = '';
+      this.ingestError  = '';
       try {
         const res = await fetch('/ingest', {
           method: 'POST',
@@ -488,21 +821,24 @@ function ragApp() {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         this.ingestStatus = 'done';
-        // Refresh library after a short delay so background task has time to write meta
         setTimeout(() => this.loadPlaylists(), 3000);
       } catch (err) {
         this.ingestStatus = 'error';
-        this.ingestError = err.message || 'Ingest failed';
+        this.ingestError  = err.message || 'Ingest failed';
       }
     },
 
+    // ── Chat ─────────────────────────────────────────────────────────────
+
     async ask() {
       if (!this.question.trim() || !this.playlistId.trim()) return;
-      this.chatStatus = 'loading';
-      this.errorMsg = '';
+      this.chatStatus    = 'loading';
+      this.answerState   = 'idle';
+      this.activeThreadId = null;
+      this.errorMsg      = '';
       this.refusalReason = '';
-      this.answer = '';
-      this.citations = [];
+      this.answer        = '';
+      this.citations     = [];
       this.currentQuestion = this.question.trim();
 
       try {
@@ -510,9 +846,9 @@ function ragApp() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            question: this.question.trim(),
+            question:    this.question.trim(),
             playlist_id: this.playlistId.trim(),
-            user_id: this.userId.trim() || 'default',
+            user_id:     this.userId.trim() || 'default',
           }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
@@ -520,18 +856,39 @@ function ragApp() {
 
         if (data.refusal) {
           this.refusalReason = data.reason || 'Insufficient context.';
-          this.chatStatus = 'done';
-          return;
+          this.answerState   = 'refused';
+        } else {
+          this.answer    = data.answer || '';
+          this.citations = data.citations || [];
+          if (this.citations.length === 0) {
+            this.refusalReason = this.answer;
+            this.answer        = '';
+            this.answerState   = 'refused';
+          } else {
+            this.answerState = this.citations.length >= 2 ? 'full' : 'limited';
+          }
         }
 
-        this.answer = data.answer || '';
-        this.citations = data.citations || [];
         this.chatStatus = 'done';
+
+        this.saveThread({
+          question:      this.currentQuestion,
+          answer:        this.answer,
+          citations:     this.citations,
+          refusal:       data.refusal || false,
+          refusalReason: this.refusalReason,
+          playlist_id:   this.playlistId,
+          user_id:       this.userId,
+        });
+
       } catch (err) {
-        this.chatStatus = 'error';
-        this.errorMsg = err.message || 'Request failed';
+        this.chatStatus  = 'error';
+        this.answerState = 'idle';
+        this.errorMsg    = err.message || 'Request failed';
       }
     },
+
+    // ── Video ─────────────────────────────────────────────────────────────
 
     openVideo(citation) {
       this.activeVideo = citation;
@@ -546,15 +903,15 @@ function ragApp() {
       return `https://www.youtube.com/watch?v=${videoId}&t=${Math.max(0, ts)}s`;
     },
 
+    // ── Format ────────────────────────────────────────────────────────────
+
     formatTime(secs) {
       secs = Math.max(0, Math.floor(secs));
       const h = Math.floor(secs / 3600);
       const m = Math.floor((secs % 3600) / 60);
       const s = secs % 60;
-      if (h > 0) {
-        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-      }
-      return `${m}:${String(s).padStart(2, '0')}`;
+      if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      return `${m}:${String(s).padStart(2,'0')}`;
     },
 
     formatDate(iso) {
