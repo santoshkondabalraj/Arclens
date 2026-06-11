@@ -47,3 +47,6 @@ htmlcov/
 
 # ── Images / design assets (large binaries, keep logo only) ───────────────────
 HomePage.jpeg
+
+# ── Go-to-market assets (demo video, scripts, recordings) ────────────────────
+demo/
