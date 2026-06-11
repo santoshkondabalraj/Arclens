@@ -14,17 +14,17 @@ Ask natural-language questions about any YouTube playlist and get grounded, cite
 User question
      │
      ▼
-retrieve       ←  Dense (Gemini embeddings) + Sparse (BM25) fused via RRF
+retrieve       ←  Dense (text-embedding-004) + Sparse (BM25) fused via RRF
      │               Meta-phrases stripped before retrieval; embedding model
      │               handles semantic synonyms ("lessons" ↔ "rules of thumb")
      ▼
-rerank         ←  Cross-encoder (ms-marco-MiniLM-L-6-v2) scores top candidates
+rerank         ←  cross-encoder/ms-marco-MiniLM-L-6-v2 scores top candidates
      │
      ▼
 threshold_check ← Refuse if no chunk clears MIN_RERANK_SCORE
      │
      ▼
-generate       ←  Gemini 2.5 Flash (thinking disabled) — grounded answer
+generate       ←  gemini-2.5-flash (thinking disabled) — grounded answer
      │               from retrieved chunks only
      ▼
 format_citations ← Inline [Source: title, channel, ~Xs] → video_id + timestamp
@@ -35,7 +35,7 @@ Answer + clickable timestamp cards → inline YouTube player
 
 ### Retrieval design
 
-The pipeline uses the same Gemini `text-embedding-004` model for both ingestion and query embedding. This means the model's semantic understanding bridges vocabulary gaps at query time — a question about "lessons to learn" finds a chunk about "rules of thumb" because both map to nearby points in embedding space. No query rewriting or keyword expansion is needed or used.
+The pipeline uses the same `models/text-embedding-004` model for both ingestion and query embedding. This means the model's semantic understanding bridges vocabulary gaps at query time — a question about "lessons to learn" finds a chunk about "rules of thumb" because both map to nearby points in embedding space. No query rewriting or keyword expansion is needed or used.
 
 BM25 complements dense retrieval for exact-term queries (specific names, numbers, rare vocabulary). The two result sets are fused with Reciprocal Rank Fusion (RRF) before cross-encoder reranking.
 
@@ -46,7 +46,7 @@ BM25 complements dense retrieval for exact-term queries (specific names, numbers
 - **Hybrid retrieval** — dense semantic search (Gemini embeddings) + BM25 lexical search, fused via RRF
 - **Semantic synonym handling** — embedding model bridges paraphrases and vocabulary gaps across any domain
 - **Cross-encoder reranking** — ms-marco-MiniLM-L-6-v2 scores each candidate for precise relevance ordering
-- **Grounded generation** — Gemini 2.5 Flash answers only from retrieved transcript chunks; thinking mode disabled for deterministic output
+- **Grounded generation** — `gemini-2.5-flash` answers only from retrieved transcript chunks; thinking mode disabled for deterministic output
 - **Timestamp citations** — every claim links back to the exact second in the source video
 - **Inline video player** — click any citation to watch from the cited moment without leaving the app
 - **Staleness detection** — warns when a playlist hasn't been re-ingested in > 30 days
@@ -61,15 +61,16 @@ BM25 complements dense retrieval for exact-term queries (specific names, numbers
 |---|---|
 | API | FastAPI + Uvicorn |
 | Orchestration | LangGraph (StateGraph) |
-| LLM | Gemini 2.5 Flash (generation, thinking disabled) |
-| Embeddings | Gemini `text-embedding-004` |
+| LLM | `gemini-2.5-flash` (generation, thinking disabled) |
+| Embeddings | `models/text-embedding-004` (Google Gemini) |
 | Vector store | Pinecone (dense namespace per user×playlist) |
 | Sparse index | BM25 (rank-bm25, persisted per playlist) |
-| Reranker | sentence-transformers cross-encoder/ms-marco-MiniLM-L-6-v2 |
+| Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers) |
 | Transcripts | youtube-transcript-api + pytubefix |
 | Frontend | Alpine.js + Tailwind CSS (CDN, no build step) |
 | Observability | LangSmith tracing + evaluation |
-| Eval generation | Claude Opus 4.8 (golden dataset), Gemini Flash (smoke probes) |
+| Eval golden gen | `claude-opus-4-8` — deliberate vocabulary-gap probes (Tier 1) |
+| Eval smoke gen + judge | `gemini-2.5-flash` — structural smoke probes + faithfulness judge |
 
 ---
 
